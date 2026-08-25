@@ -1,0 +1,762 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tap Accompanist</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script src="https://unpkg.com/@tonejs/midi"></script>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      max-width: 540px;
+      margin: 20px auto;
+      padding: 20px;
+      text-align: center;
+      background-color: #f4f7f6;
+      color: #333;
+    }
+    .card {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      position: relative;
+    }
+    .lang-switcher {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      font-size: 12px;
+    }
+    .lang-switcher select {
+      padding: 2px 6px;
+      font-size: 12px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    input[type="file"] { margin: 10px 0; width: 100%; }
+    
+    .setting-group {
+      margin: 10px 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: bold;
+      flex-wrap: wrap;
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .setting-group select, .setting-group input[type="number"] {
+      padding: 4px;
+      font-size: 13px;
+      text-align: center;
+    }
+    
+    /* アコーディオン枠 */
+    .assign-group {
+      margin: 10px 0;
+      padding: 10px 15px;
+      background: #eef5fc;
+      border-radius: 8px;
+      font-size: 13px;
+      text-align: left;
+    }
+    .assign-group summary {
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+      outline: none;
+      color: #2C68B2;
+      text-align: center;
+    }
+    .assign-content {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .assign-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .assign-btn {
+      padding: 3px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      background: #4A90E2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    .midi-status { font-size: 12px; color: #2e7d32; font-weight: bold; }
+    
+    .jump-group {
+      margin: 10px 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .jump-group input { width: 55px; padding: 4px; font-size: 14px; text-align: center; }
+    .jump-group button {
+      padding: 4px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      background-color: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+
+    .tap-btn {
+      display: block;
+      width: 100%;
+      height: 90px;
+      font-size: 18px;
+      font-weight: bold;
+      color: white;
+      background-color: #4A90E2;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      margin: 15px 0;
+      user-select: none;
+    }
+    .tap-btn:active { background-color: #2C68B2; }
+    .tap-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+
+    .status-measure { font-size: 22px; font-weight: bold; color: #2C68B2; margin: 8px 0; }
+    .status-sub { font-size: 13px; color: #666; margin-bottom: 10px; }
+    .reset-btn { padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="lang-switcher">
+      🌐 <select id="lang-select">
+        <option value="ja" selected>日本語</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+
+    <h2 data-i18n="title">🎹 Tap Accompanist</h2>
+
+    <input type="file" id="midi-input" accept=".mid,.midi">
+
+    <div style="margin: 8px 0; text-align: center; font-size: 13px; font-weight: bold;">
+      <label for="midi-out-select" data-i18n="outputSound">出力音源:</label>
+      <select id="midi-out-select" style="padding: 4px; font-size: 13px; max-width: 320px;">
+        <option value="internal" data-i18n="internalSynth">内部Web音源 (Tone.js)</option>
+      </select>
+    </div>
+
+    <!-- 折りたたみ可能なキー＆MIDI割り当てエリア -->
+    <details class="assign-group">
+      <summary data-i18n="assignHeader">⚙️ キー・MIDI入力設定</summary>
+      <div class="assign-content">
+        <div class="assign-row">
+          <span><span data-i18n="key1">キー1</span>: <span id="key1-display" style="color:#d9534f; font-weight:bold;">Space</span></span>
+          <button id="set-key1-btn" class="assign-btn" data-i18n="btnChange">変更</button>
+        </div>
+        <div class="assign-row">
+          <span><span data-i18n="key2">キー2</span>: <span id="key2-display" style="color:#d9534f; font-weight:bold;">KeyZ</span></span>
+          <button id="set-key2-btn" class="assign-btn" data-i18n="btnChange">変更</button>
+        </div>
+        <div class="assign-row">
+          <span><span data-i18n="key3">キー3</span>: <span id="key3-display" style="color:#d9534f; font-weight:bold;">KeyX</span></span>
+          <button id="set-key3-btn" class="assign-btn" data-i18n="btnChange">変更</button>
+        </div>
+        <div class="assign-row">
+          <span><span data-i18n="key4">キー4</span>: <span id="key4-display" style="color:#d9534f; font-weight:bold;">Numpad0</span></span>
+          <button id="set-key4-btn" class="assign-btn" data-i18n="btnChange">変更</button>
+        </div>
+        <div class="assign-row" style="border-top: 1px dashed #c0d8f0; padding-top:4px; margin-top:2px;">
+          <span><span data-i18n="pedal">ペダル (CC64)</span>: <span id="pedal-display" style="color:#2e7d32; font-weight:bold;">KeyA</span></span>
+          <button id="set-pedal-btn" class="assign-btn" style="background:#2e7d32;" data-i18n="btnChange">変更</button>
+        </div>
+        <div class="assign-row" style="margin-top:2px; border-top: 1px solid #d0e1f9; padding-top:4px;">
+          <span><span data-i18n="midiInputLabel">打鍵用MIDI機器</span>: <span id="midi-device-name" class="midi-status">未接続</span></span>
+        </div>
+      </div>
+    </details>
+
+    <div class="setting-group">
+      <div>
+        <label for="step-select" data-i18n="labelStep">刻み:</label>
+        <select id="step-select">
+          <option value="1" data-i18n="opt1Beat">1拍 (4分)</option>
+          <option value="0.5" selected data-i18n="optHalfBeat">1/2拍 (8分)</option>
+          <option value="0.3333333333333333" data-i18n="optTriplet">1/3拍 (8分3連)</option>
+          <option value="0.25" data-i18n="optQuarterBeat">1/4拍 (16分)</option>
+        </select>
+      </div>
+      <div>
+        <label for="transpose-select" data-i18n="labelTranspose">移調:</label>
+        <select id="transpose-select">
+          <option value="6">+6</option><option value="5">+5</option><option value="4">+4</option><option value="3">+3</option><option value="2">+2</option><option value="1">+1</option>
+          <option value="0" selected data-i18n="optOriginalKey">原曲 (0)</option>
+          <option value="-1">-1</option><option value="-2">-2</option><option value="-3">-3</option><option value="-4">-4</option><option value="-5">-5</option><option value="-6">-6</option>
+        </select>
+      </div>
+      <div>
+        <label for="bpm-input">BPM:</label>
+        <input type="number" id="bpm-input" value="120" min="30" max="300" style="width:48px;">
+        <label style="font-size:11px; font-weight:normal; margin-left:2px; cursor:pointer;">
+          <input type="checkbox" id="auto-bpm-check"> <span data-i18n="autoBpm">動的追従</span>
+        </label>
+      </div>
+      <div style="width: 100%; margin-top: 4px;">
+        <label style="font-size:11px; font-weight:normal; cursor:pointer;">
+          <input type="checkbox" id="pc-send-check" checked> <span data-i18n="sendPc">音色指定(プログラムチェンジ)も送信</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="jump-group">
+      <label for="measure-input"><b data-i18n="labelJump">指定小節へ移動:</b></label>
+      <input type="number" id="measure-input" value="1" min="1">
+      <button id="jump-btn" disabled data-i18n="btnJump">移動</button>
+    </div>
+
+    <button id="tap-btn" class="tap-btn" disabled data-i18n="tapBtn">
+      ここをクリック / 4つの割当キー / MIDI
+    </button>
+
+    <div class="status">
+      <div id="status-measure" class="status-measure">第 1 小節 ( 1.0 拍目 )</div>
+      <div id="status-sub" class="status-sub" data-i18n="statusInit">MIDIファイルを選択してください</div>
+    </div>
+
+    <button id="reset-btn" class="reset-btn" disabled data-i18n="btnReset">最初からやり直す</button>
+  </div>
+
+  <script>
+    const i18nDict = {
+      ja: {
+        title: "🎹 Tap Accompanist",
+        outputSound: "出力音源:",
+        internalSynth: "内部Web音源 (Tone.js)",
+        winDefaultSynth: "Windows標準音源",
+        externalOut: "外部:",
+        assignHeader: "⚙️ キー・MIDI入力設定",
+        key1: "キー1", key2: "キー2", key3: "キー3", key4: "キー4",
+        pedal: "ペダル (CC64)",
+        btnChange: "変更",
+        btnPressKey: "押して下さい...",
+        midiInputLabel: "打鍵用MIDI機器",
+        midiNotConnected: "未接続 (キーボード操作可能)",
+        labelStep: "刻み:",
+        opt1Beat: "1拍 (4分)",
+        optHalfBeat: "1/2拍 (8分)",
+        optTriplet: "1/3拍 (8分3連)",
+        optQuarterBeat: "1/4拍 (16分)",
+        labelTranspose: "移調:",
+        optOriginalKey: "原曲 (0)",
+        autoBpm: "動的追従",
+        sendPc: "音色指定(プログラムチェンジ)も送信",
+        labelJump: "指定小節へ移動:",
+        btnJump: "移動",
+        tapBtn: "ここをクリック / 4つの割当キー / MIDI",
+        statusInit: "MIDIファイルを選択してください",
+        statusParsing: "解析中:",
+        statusReady: "準備完了:",
+        statusFinished: "曲の最後まで再生しました！",
+        btnReset: "最初からやり直す",
+        formatMeasure: (m, totalM, b) => `第 ${m} / ${totalM} 小節 ( ${b} 拍目 )`,
+        formatProgress: (s, totalS) => `進行度: ${s} / ${totalS} ステップ`
+      },
+      en: {
+        title: "🎹 Tap Accompanist",
+        outputSound: "Output Sound:",
+        internalSynth: "Internal Web Synth (Tone.js)",
+        winDefaultSynth: "Windows Default Synth",
+        externalOut: "External:",
+        assignHeader: "⚙️ Key & MIDI Settings",
+        key1: "Key 1", key2: "Key 2", key3: "Key 3", key4: "Key 4",
+        pedal: "Pedal (CC64)",
+        btnChange: "Change",
+        btnPressKey: "Press Key...",
+        midiInputLabel: "MIDI Input Device",
+        midiNotConnected: "Not Connected (Keyboard Active)",
+        labelStep: "Step:",
+        opt1Beat: "1 Beat (Quarter)",
+        optHalfBeat: "1/2 Beat (8th)",
+        optTriplet: "1/3 Beat (8th Triplet)",
+        optQuarterBeat: "1/4 Beat (16th)",
+        labelTranspose: "Transpose:",
+        optOriginalKey: "Original Key (0)",
+        autoBpm: "Auto-Follow",
+        sendPc: "Send Program Change (Instrument Change)",
+        labelJump: "Jump to Measure:",
+        btnJump: "Jump",
+        tapBtn: "Click Here / 4 Assigned Keys / MIDI",
+        statusInit: "Please select a MIDI file",
+        statusParsing: "Parsing:",
+        statusReady: "Ready:",
+        statusFinished: "Reached the end of the song!",
+        btnReset: "Reset to Start",
+        formatMeasure: (m, totalM, b) => `Measure ${m} / ${totalM} ( Beat ${b} )`,
+        formatProgress: (s, totalS) => `Progress: ${s} / ${totalS} Steps`
+      }
+    };
+
+    let currentLang = 'ja';
+
+    const langSelect = document.getElementById('lang-select');
+    langSelect.addEventListener('change', (e) => {
+      currentLang = e.target.value;
+      updateLanguage();
+    });
+
+    function updateLanguage() {
+      const lang = i18nDict[currentLang];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (lang[key]) {
+          el.textContent = lang[key];
+        }
+      });
+      updateMIDIInputs();
+      updateMIDIOutputs();
+      updateUI();
+    }
+
+    const synth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "triangle" },
+      envelope: { attack: 0.005, decay: 0.3, sustain: 0.2, release: 0.8 }
+    }).toDestination();
+
+    let stepList = [];
+    let currentStep = 0;
+    let isLoaded = false;
+    let currentMidiData = null;
+    let globalMidiAccess = null;
+
+    let assignedKeys = ['Space', 'KeyZ', 'KeyX', 'Numpad0'];
+    let assignedPedalKey = 'KeyA';
+    let targetAssigningIndex = -1;
+    let isPedalDown = false;
+    let lastTapTime = 0;
+
+    const midiInput = document.getElementById('midi-input');
+    const midiOutSelect = document.getElementById('midi-out-select');
+    const stepSelect = document.getElementById('step-select');
+    const transposeSelect = document.getElementById('transpose-select');
+    const bpmInput = document.getElementById('bpm-input');
+    const autoBpmCheck = document.getElementById('auto-bpm-check');
+    const pcSendCheck = document.getElementById('pc-send-check');
+    const measureInput = document.getElementById('measure-input');
+    const jumpBtn = document.getElementById('jump-btn');
+    const tapBtn = document.getElementById('tap-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const statusMeasureEl = document.getElementById('status-measure');
+    const statusSubEl = document.getElementById('status-sub');
+    
+    const setKeyBtns = [
+      document.getElementById('set-key1-btn'),
+      document.getElementById('set-key2-btn'),
+      document.getElementById('set-key3-btn'),
+      document.getElementById('set-key4-btn')
+    ];
+    const keyDisplays = [
+      document.getElementById('key1-display'),
+      document.getElementById('key2-display'),
+      document.getElementById('key3-display'),
+      document.getElementById('key4-display')
+    ];
+    const setPedalBtn = document.getElementById('set-pedal-btn');
+    const pedalDisplay = document.getElementById('pedal-display');
+    const midiDeviceNameEl = document.getElementById('midi-device-name');
+
+    if (navigator.requestMIDIAccess) {
+      navigator.requestMIDIAccess().then(onMIDISuccess, () => {
+        midiDeviceNameEl.textContent = "N/A";
+      });
+    }
+
+    function onMIDISuccess(midiAccess) {
+      globalMidiAccess = midiAccess;
+      updateMIDIInputs();
+      updateMIDIOutputs();
+
+      midiAccess.onstatechange = () => {
+        updateMIDIInputs();
+        updateMIDIOutputs();
+      };
+    }
+
+    function updateMIDIInputs() {
+      if (!globalMidiAccess) return;
+      const inputs = globalMidiAccess.inputs.values();
+      let connectedInputs = [];
+
+      for (let input of inputs) {
+        if (input.name.toLowerCase().includes('loopmidi')) {
+          input.onmidimessage = null;
+          continue;
+        }
+
+        input.onmidimessage = (e) => {
+          const selectedOutId = midiOutSelect.value;
+          if (selectedOutId !== 'internal') {
+            const outPort = globalMidiAccess.outputs.get(selectedOutId);
+            if (outPort && outPort.name === input.name) return;
+          }
+
+          const [status, note, velocity] = e.data;
+          if ((status >> 4) === 9 && velocity > 0) playNextStep();
+        };
+        connectedInputs.push(input.name);
+      }
+
+      const lang = i18nDict[currentLang];
+      midiDeviceNameEl.textContent = connectedInputs.length > 0 ? connectedInputs.join(', ') : lang.midiNotConnected;
+    }
+
+    function updateMIDIOutputs() {
+      if (!globalMidiAccess) return;
+      const lang = i18nDict[currentLang];
+      
+      const currentSelected = midiOutSelect.value;
+      midiOutSelect.innerHTML = `<option value="internal">${lang.internalSynth}</option>`;
+      
+      const outputs = globalMidiAccess.outputs.values();
+      for (let output of outputs) {
+        const opt = document.createElement('option');
+        opt.value = output.id;
+        
+        if (output.name.includes('Microsoft GS Wavetable') || output.name.includes('MS GS Wavetable')) {
+          opt.textContent = `${lang.winDefaultSynth} (${output.name})`;
+        } else {
+          opt.textContent = `${lang.externalOut} ${output.name}`;
+        }
+        
+        if (output.id === currentSelected) opt.selected = true;
+        midiOutSelect.appendChild(opt);
+      }
+    }
+
+    setKeyBtns.forEach((btn, index) => {
+      btn.addEventListener('click', () => {
+        targetAssigningIndex = index;
+        btn.textContent = i18nDict[currentLang].btnPressKey;
+        btn.style.background = "#d9534f";
+      });
+    });
+
+    setPedalBtn.addEventListener('click', () => {
+      targetAssigningIndex = 4;
+      setPedalBtn.textContent = i18nDict[currentLang].btnPressKey;
+      setPedalBtn.style.background = "#d9534f";
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (['INPUT', 'SELECT'].includes(document.activeElement.tagName)) {
+        if (e.code === 'Enter' && document.activeElement === measureInput) {
+          jumpToMeasure();
+          measureInput.blur();
+        }
+        return;
+      }
+
+      if (targetAssigningIndex !== -1) {
+        e.preventDefault();
+        const code = e.code;
+        let displayName = code.replace('Numpad', 'Num').replace('Key', '');
+
+        if (targetAssigningIndex === 4) {
+          assignedPedalKey = code;
+          pedalDisplay.textContent = displayName;
+          setPedalBtn.textContent = i18nDict[currentLang].btnChange;
+          setPedalBtn.style.background = "#2e7d32";
+        } else {
+          assignedKeys[targetAssigningIndex] = code;
+          keyDisplays[targetAssigningIndex].textContent = displayName;
+          setKeyBtns[targetAssigningIndex].textContent = i18nDict[currentLang].btnChange;
+          setKeyBtns[targetAssigningIndex].style.background = "#4A90E2";
+        }
+        targetAssigningIndex = -1;
+        return;
+      }
+
+      if (e.code === assignedPedalKey && !e.repeat && !isPedalDown) {
+        e.preventDefault();
+        isPedalDown = true;
+        sendSustainPedal(127);
+        pedalDisplay.style.color = '#e67e22';
+        return;
+      }
+
+      if (assignedKeys.includes(e.code)) {
+        e.preventDefault();
+        if (e.repeat) return;
+        playNextStep();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (['INPUT', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+      if (e.code === assignedPedalKey) {
+        isPedalDown = false;
+        sendSustainPedal(0);
+        pedalDisplay.style.color = '#2e7d32';
+      }
+    });
+
+    function sendSustainPedal(value) {
+      const selectedOutId = midiOutSelect.value;
+      if (selectedOutId !== 'internal' && globalMidiAccess) {
+        const selectedMidiOutput = globalMidiAccess.outputs.get(selectedOutId);
+        if (selectedMidiOutput) {
+          for (let ch = 0; ch < 16; ch++) {
+            selectedMidiOutput.send([0xB0 | ch, 64, value]);
+          }
+        }
+      }
+    }
+
+    midiInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const lang = i18nDict[currentLang];
+      try {
+        statusSubEl.textContent = `${lang.statusParsing} ${file.name}...`;
+        const arrayBuffer = await file.arrayBuffer();
+        currentMidiData = new Midi(arrayBuffer);
+
+        if (currentMidiData.header.tempos?.length > 0) {
+          bpmInput.value = Math.round(currentMidiData.header.tempos[0].bpm);
+        }
+
+        recalculateSteps();
+
+        isLoaded = true;
+        tapBtn.disabled = false;
+        resetBtn.disabled = false;
+        jumpBtn.disabled = false;
+
+        statusSubEl.textContent = `${lang.statusReady} ${file.name}`;
+      } catch (err) {
+        console.error(err);
+        statusSubEl.textContent = "Error: Invalid MIDI file.";
+      }
+    });
+
+    stepSelect.addEventListener('change', () => { if (isLoaded) recalculateSteps(); });
+
+    function getBeatsPerMeasure() { return 4; }
+
+    function recalculateSteps() {
+      if (!currentMidiData) return;
+
+      const ppq = currentMidiData.header.ppq || 480;
+      const stepValue = parseFloat(stepSelect.value);
+      const stepTicks = ppq * stepValue;
+      const stepsMap = {};
+
+      currentMidiData.tracks.forEach((track, trackIdx) => {
+        let trackChan = 0;
+        if (typeof track.channel === 'number' && track.channel >= 0) {
+          trackChan = track.channel;
+        } else if (track.instrument && track.instrument.percussion) {
+          trackChan = 9;
+        } else {
+          trackChan = trackIdx % 16;
+        }
+
+        track.notes.forEach(note => {
+          const stepIndex = Math.floor(note.ticks / stepTicks);
+          const offsetTicks = note.ticks - (stepIndex * stepTicks);
+
+          if (!stepsMap[stepIndex]) stepsMap[stepIndex] = [];
+
+          const finalChan = (typeof note.channel === 'number') ? note.channel : trackChan;
+
+          stepsMap[stepIndex].push({
+            type: 'note',
+            midiNumber: note.midi,
+            channel: finalChan,
+            offsetInBeats: offsetTicks / ppq,
+            durationInBeats: note.durationTicks / ppq
+          });
+        });
+
+        if (track.controlChanges) {
+          Object.keys(track.controlChanges).forEach(ccNumStr => {
+            const ccList = track.controlChanges[ccNumStr];
+            if (Array.isArray(ccList)) {
+              ccList.forEach(cc => {
+                const stepIndex = Math.floor(cc.ticks / stepTicks);
+                const offsetTicks = cc.ticks - (stepIndex * stepTicks);
+
+                if (!stepsMap[stepIndex]) stepsMap[stepIndex] = [];
+
+                const val7bit = (cc.value <= 1 && cc.value > 0) ? Math.round(cc.value * 127) : Math.round(cc.value);
+                const finalChan = (typeof cc.channel === 'number') ? cc.channel : trackChan;
+
+                stepsMap[stepIndex].push({
+                  type: 'cc',
+                  number: cc.number !== undefined ? cc.number : parseInt(ccNumStr, 10),
+                  value: val7bit,
+                  channel: finalChan,
+                  offsetInBeats: offsetTicks / ppq
+                });
+              });
+            }
+          });
+        }
+
+        let pcEvents = track.programChanges || [];
+        if (pcEvents.length === 0 && track.instrument && typeof track.instrument.number === 'number') {
+          pcEvents = [{ number: track.instrument.number, ticks: 0 }];
+        }
+
+        pcEvents.forEach(pc => {
+          const stepIndex = Math.floor(pc.ticks / stepTicks);
+          const offsetTicks = pc.ticks - (stepIndex * stepTicks);
+
+          if (!stepsMap[stepIndex]) stepsMap[stepIndex] = [];
+
+          const finalChan = (typeof pc.channel === 'number') ? pc.channel : trackChan;
+
+          stepsMap[stepIndex].push({
+            type: 'pc',
+            number: pc.number,
+            channel: finalChan,
+            offsetInBeats: offsetTicks / ppq
+          });
+        });
+      });
+
+      const maxStep = Math.max(...Object.keys(stepsMap).map(Number), -1);
+      stepList = [];
+      for (let i = 0; i <= maxStep; i++) {
+        stepList[i] = stepsMap[i] || [];
+      }
+
+      currentStep = 0;
+      lastTapTime = 0;
+      updateUI();
+    }
+
+    function jumpToMeasure() {
+      if (!isLoaded || stepList.length === 0) return;
+      const targetMeasure = parseInt(measureInput.value, 10) || 1;
+      const stepValue = parseFloat(stepSelect.value);
+      const targetBeat = (targetMeasure - 1) * getBeatsPerMeasure();
+      currentStep = Math.min(Math.max(Math.round(targetBeat / stepValue), 0), stepList.length - 1);
+      lastTapTime = 0;
+      updateUI();
+    }
+
+    async function playNextStep() {
+      if (!isLoaded || currentStep >= stepList.length) return;
+
+      if (Tone.context.state !== 'running') {
+        await Tone.start();
+      }
+
+      const nowTime = performance.now();
+      if (autoBpmCheck && autoBpmCheck.checked && lastTapTime > 0) {
+        const intervalMs = nowTime - lastTapTime;
+        if (intervalMs > 50 && intervalMs < 4000) {
+          const calculatedBpm = Math.round(60000 / intervalMs);
+          if (calculatedBpm >= 30 && calculatedBpm <= 300) {
+            bpmInput.value = calculatedBpm;
+          }
+        }
+      }
+      lastTapTime = nowTime;
+
+      const eventsToPlay = stepList[currentStep];
+      const bpm = Number(bpmInput.value) || 120;
+      const secondsPerBeat = 60 / bpm;
+      const transposeAmount = parseInt(transposeSelect.value, 10) || 0;
+      const now = Tone.now();
+
+      const selectedOutId = midiOutSelect.value;
+      let selectedMidiOutput = null;
+      if (selectedOutId !== 'internal' && globalMidiAccess) {
+        selectedMidiOutput = globalMidiAccess.outputs.get(selectedOutId);
+      }
+
+      if (eventsToPlay && eventsToPlay.length > 0) {
+        eventsToPlay.forEach(item => {
+          const delayMs = item.offsetInBeats * secondsPerBeat * 1000;
+          const chan = (item.channel !== undefined ? item.channel : 0) & 0x0F;
+
+          if (item.type === 'pc') {
+            if (selectedMidiOutput && pcSendCheck.checked) {
+              setTimeout(() => {
+                selectedMidiOutput.send([0xC0 | chan, item.number & 0x7F]);
+              }, delayMs);
+            }
+          } else if (item.type === 'cc') {
+            if (selectedMidiOutput) {
+              setTimeout(() => {
+                selectedMidiOutput.send([0xB0 | chan, item.number, item.value]);
+              }, delayMs);
+            }
+          } else {
+            const durationInSeconds = Math.max(item.durationInBeats * secondsPerBeat, 0.1);
+
+            const pitch = (chan === 9) ? item.midiNumber : Math.max(0, Math.min(127, item.midiNumber + transposeAmount));
+
+            if (selectedMidiOutput) {
+              setTimeout(() => {
+                selectedMidiOutput.send([0x90 | chan, pitch, 100]);
+                setTimeout(() => {
+                  selectedMidiOutput.send([0x80 | chan, pitch, 0]);
+                }, durationInSeconds * 1000);
+              }, delayMs);
+            } else {
+              const startTime = now + (item.offsetInBeats * secondsPerBeat);
+              const noteName = Tone.Frequency(pitch, "midi").toNote();
+              synth.triggerAttackRelease(noteName, durationInSeconds, startTime);
+            }
+          }
+        });
+      }
+
+      currentStep++;
+      updateUI();
+    }
+
+    function updateUI() {
+      const lang = i18nDict[currentLang];
+      const stepValue = parseFloat(stepSelect.value);
+      const beatsPerMeasure = getBeatsPerMeasure();
+      const currentBeatTotal = currentStep * stepValue;
+      const totalBeatsTotal = stepList.length * stepValue;
+
+      const currentMeasure = Math.floor(currentBeatTotal / beatsPerMeasure) + 1;
+      const totalMeasures = Math.ceil(totalBeatsTotal / beatsPerMeasure) || 1;
+      const beatInMeasure = ((currentBeatTotal % beatsPerMeasure) + 1).toFixed(1);
+
+      if (document.activeElement !== measureInput) {
+        measureInput.value = currentMeasure;
+      }
+
+      statusMeasureEl.textContent = lang.formatMeasure(currentMeasure, totalMeasures, beatInMeasure);
+      statusSubEl.textContent = lang.formatProgress(currentStep, stepList.length);
+
+      if (currentStep >= stepList.length && stepList.length > 0) {
+        statusSubEl.textContent = lang.statusFinished;
+      }
+    }
+
+    tapBtn.addEventListener('click', () => { playNextStep(); });
+    resetBtn.addEventListener('click', () => { currentStep = 0; lastTapTime = 0; updateUI(); });
+  </script>
+
+</body>
+</html>
