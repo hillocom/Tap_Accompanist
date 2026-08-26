@@ -133,6 +133,23 @@
 
     .status-measure { font-size: 22px; font-weight: bold; color: #2C68B2; margin: 8px 0; }
     .status-sub { font-size: 13px; color: #666; margin-bottom: 10px; }
+    .bottom-btn-group {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .alloff-btn {
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      background-color: #d9534f;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    .alloff-btn:active { background-color: #c9302c; }
     .reset-btn { padding: 6px 14px; font-size: 13px; cursor: pointer; }
   </style>
 </head>
@@ -180,6 +197,10 @@
         <div class="assign-row" style="border-top: 1px dashed #c0d8f0; padding-top:4px; margin-top:2px;">
           <span><span data-i18n="pedal">ペダル (CC64)</span>: <span id="pedal-display" style="color:#2e7d32; font-weight:bold;">KeyA</span></span>
           <button id="set-pedal-btn" class="assign-btn" style="background:#2e7d32;" data-i18n="btnChange">変更</button>
+        </div>
+        <div class="assign-row" style="border-top: 1px dashed #c0d8f0; padding-top:4px; margin-top:2px;">
+          <span><span data-i18n="alloffKey">消音 (All Note Off)</span>: <span id="alloff-display" style="color:#d9534f; font-weight:bold;">KeyC</span></span>
+          <button id="set-alloff-btn" class="assign-btn" style="background:#d9534f;" data-i18n="btnChange">変更</button>
         </div>
         <div class="assign-row" style="margin-top:2px; border-top: 1px solid #d0e1f9; padding-top:4px;">
           <span><span data-i18n="midiInputLabel">打鍵用MIDI機器</span>: <span id="midi-device-name" class="midi-status">未接続</span></span>
@@ -234,7 +255,10 @@
       <div id="status-sub" class="status-sub" data-i18n="statusInit">MIDIファイルを選択してください</div>
     </div>
 
-    <button id="reset-btn" class="reset-btn" disabled data-i18n="btnReset">最初からやり直す</button>
+    <div class="bottom-btn-group">
+      <button id="alloff-btn" class="alloff-btn" data-i18n="btnAllNoteOff">🔊 全音消音 (All Note Off)</button>
+      <button id="reset-btn" class="reset-btn" disabled data-i18n="btnReset">最初からやり直す</button>
+    </div>
   </div>
 
   <script>
@@ -248,6 +272,7 @@
         assignHeader: "⚙️ キー・MIDI入力設定",
         key1: "キー1", key2: "キー2", key3: "キー3", key4: "キー4",
         pedal: "ペダル (CC64)",
+        alloffKey: "消音 (All Note Off)",
         btnChange: "変更",
         btnPressKey: "押して下さい...",
         midiInputLabel: "打鍵用MIDI機器",
@@ -268,6 +293,7 @@
         statusParsing: "解析中:",
         statusReady: "準備完了:",
         statusFinished: "曲の最後まで再生しました！",
+        btnAllNoteOff: "🔊 全音消音 (All Note Off)",
         btnReset: "最初からやり直す",
         formatMeasure: (m, totalM, b) => `第 ${m} / ${totalM} 小節 ( ${b} 拍目 )`,
         formatProgress: (s, totalS) => `進行度: ${s} / ${totalS} ステップ`
@@ -281,6 +307,7 @@
         assignHeader: "⚙️ Key & MIDI Settings",
         key1: "Key 1", key2: "Key 2", key3: "Key 3", key4: "Key 4",
         pedal: "Pedal (CC64)",
+        alloffKey: "All Note Off",
         btnChange: "Change",
         btnPressKey: "Press Key...",
         midiInputLabel: "MIDI Input Device",
@@ -301,6 +328,7 @@
         statusParsing: "Parsing:",
         statusReady: "Ready:",
         statusFinished: "Reached the end of the song!",
+        btnAllNoteOff: "🔊 All Note Off",
         btnReset: "Reset to Start",
         formatMeasure: (m, totalM, b) => `Measure ${m} / ${totalM} ( Beat ${b} )`,
         formatProgress: (s, totalS) => `Progress: ${s} / ${totalS} Steps`
@@ -341,6 +369,7 @@
 
     let assignedKeys = ['Space', 'KeyZ', 'KeyX', 'Numpad0'];
     let assignedPedalKey = 'KeyA';
+    let assignedAllOffKey = 'KeyC';
     let targetAssigningIndex = -1;
     let isPedalDown = false;
     let lastTapTime = 0;
@@ -356,6 +385,7 @@
     const jumpBtn = document.getElementById('jump-btn');
     const tapBtn = document.getElementById('tap-btn');
     const resetBtn = document.getElementById('reset-btn');
+    const alloffBtn = document.getElementById('alloff-btn');
     const statusMeasureEl = document.getElementById('status-measure');
     const statusSubEl = document.getElementById('status-sub');
     
@@ -373,6 +403,8 @@
     ];
     const setPedalBtn = document.getElementById('set-pedal-btn');
     const pedalDisplay = document.getElementById('pedal-display');
+    const setAlloffBtn = document.getElementById('set-alloff-btn');
+    const alloffDisplay = document.getElementById('alloff-display');
     const midiDeviceNameEl = document.getElementById('midi-device-name');
 
     if (navigator.requestMIDIAccess) {
@@ -457,6 +489,12 @@
       setPedalBtn.style.background = "#d9534f";
     });
 
+    setAlloffBtn.addEventListener('click', () => {
+      targetAssigningIndex = 5;
+      setAlloffBtn.textContent = i18nDict[currentLang].btnPressKey;
+      setAlloffBtn.style.background = "#d9534f";
+    });
+
     document.addEventListener('keydown', (e) => {
       if (['INPUT', 'SELECT'].includes(document.activeElement.tagName)) {
         if (e.code === 'Enter' && document.activeElement === measureInput) {
@@ -476,6 +514,11 @@
           pedalDisplay.textContent = displayName;
           setPedalBtn.textContent = i18nDict[currentLang].btnChange;
           setPedalBtn.style.background = "#2e7d32";
+        } else if (targetAssigningIndex === 5) {
+          assignedAllOffKey = code;
+          alloffDisplay.textContent = displayName;
+          setAlloffBtn.textContent = i18nDict[currentLang].btnChange;
+          setAlloffBtn.style.background = "#d9534f";
         } else {
           assignedKeys[targetAssigningIndex] = code;
           keyDisplays[targetAssigningIndex].textContent = displayName;
@@ -483,6 +526,12 @@
           setKeyBtns[targetAssigningIndex].style.background = "#4A90E2";
         }
         targetAssigningIndex = -1;
+        return;
+      }
+
+      if (e.code === assignedAllOffKey && !e.repeat) {
+        e.preventDefault();
+        sendAllNoteOff();
         return;
       }
 
@@ -518,6 +567,26 @@
         if (selectedMidiOutput) {
           for (let ch = 0; ch < 16; ch++) {
             selectedMidiOutput.send([0xB0 | ch, 64, value]);
+          }
+        }
+      }
+    }
+
+    function sendAllNoteOff() {
+      // 内部音源の強制消音
+      if (synth && synth.releaseAll) {
+        synth.releaseAll();
+      }
+
+      // 外部MIDI音源（全16ch）への強制消音・ペダル解除信号送信
+      const selectedOutId = midiOutSelect.value;
+      if (selectedOutId !== 'internal' && globalMidiAccess) {
+        const selectedMidiOutput = globalMidiAccess.outputs.get(selectedOutId);
+        if (selectedMidiOutput) {
+          for (let ch = 0; ch < 16; ch++) {
+            selectedMidiOutput.send([0xB0 | ch, 64, 0]);   // サステインペダルOFF
+            selectedMidiOutput.send([0xB0 | ch, 123, 0]);  // All Notes Off
+            selectedMidiOutput.send([0xB0 | ch, 120, 0]);  // All Sound Off
           }
         }
       }
@@ -755,7 +824,8 @@
     }
 
     tapBtn.addEventListener('click', () => { playNextStep(); });
-    resetBtn.addEventListener('click', () => { currentStep = 0; lastTapTime = 0; updateUI(); });
+    resetBtn.addEventListener('click', () => { currentStep = 0; lastTapTime = 0; sendAllNoteOff(); updateUI(); });
+    alloffBtn.addEventListener('click', () => { sendAllNoteOff(); });
   </script>
 
 </body>
