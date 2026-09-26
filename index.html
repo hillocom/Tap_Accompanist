@@ -719,11 +719,16 @@
 
     function jumpToMeasure() {
       if (!isLoaded || stepList.length === 0) return;
-      const targetMeasure = parseInt(measureInput.value, 10) || 1;
+      const targetMeasure = Math.max(1, parseInt(measureInput.value, 10) || 1);
       const stepValue = parseFloat(stepSelect.value);
       const targetBeat = (targetMeasure - 1) * getBeatsPerMeasure();
-      currentStep = Math.min(Math.max(Math.round(targetBeat / stepValue), 0), stepList.length - 1);
+      
+      // ジャンプ位置を「0」〜「ステップ数」までの適切な範囲内に収める
+      const calculatedStep = Math.round(targetBeat / stepValue);
+      currentStep = Math.min(Math.max(calculatedStep, 0), stepList.length);
+      
       lastTapTime = 0;
+      sendAllNoteOff(); // 移動時に前の音をクリア
       updateUI();
     }
 
@@ -823,6 +828,8 @@
       }
     }
 
+    // イベントリスナーの登録
+    jumpBtn.addEventListener('click', jumpToMeasure);
     tapBtn.addEventListener('click', () => { playNextStep(); });
     resetBtn.addEventListener('click', () => { currentStep = 0; lastTapTime = 0; sendAllNoteOff(); updateUI(); });
     alloffBtn.addEventListener('click', () => { sendAllNoteOff(); });
